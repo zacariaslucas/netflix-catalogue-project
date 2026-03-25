@@ -1,0 +1,335 @@
+/*
+Este script ha sido desarrollado con el objetivo de limpiar el dataset de partida y posteriormente analizar sus datos.
+En el proceso se crean varias tablas temporales que servirán también para utilizarlas como fuente de datos en herramientas de visualización.
+El script está diseñado para ser reproducible y mantenible, siguiendo una lógica estructurada y documentada en cada sección.
+Microsoft SQL Server es el sistema utilizado.
+*/
+
+-- Creamos una nueva tabla para conservar la original
+
+SELECT *
+INTO netflix_clean
+FROM netflix_titles;
+
+-- Buscamos duplicados
+
+WITH duplicate_cte AS
+(
+	SELECT *,
+	COUNT(*) OVER(PARTITION BY title, director, country) AS duplicates
+    FROM netflix_titles
+)
+SELECT * FROM duplicate_cte
+WHERE duplicates>1;
+
+-- Vemos que los duplicados difieren en la fecha de incorporación a Netflix
+-- Decidimos quedarnos con el registro que entró por primera vez al catálogo
+
+WITH duplicate_ordered_cte AS
+(
+	SELECT *,
+	ROW_NUMBER() OVER(PARTITION BY title, director, country ORDER BY COALESCE(date_added, '2025-01-01')) AS row_num
+    FROM netflix_clean
+)
+DELETE FROM duplicate_ordered_cte
+WHERE row_num>1;
+
+-- Cambiamos el formato de show_id y lo establecemos como primary key
+
+UPDATE netflix_clean
+SET show_id = CAST(SUBSTRING(show_id,2, LEN(show_id)) AS INT);
+
+ALTER TABLE netflix_clean
+ALTER COLUMN show_id INT NOT NULL;
+
+ALTER TABLE netflix_clean
+ADD CONSTRAINT pk_netflix_clean
+PRIMARY KEY (show_id);
+
+-- Vemos que algunos directores aparecen como "Not Given": los reemplazamos por nulos
+
+ALTER TABLE netflix_clean
+ALTER COLUMN director VARCHAR(max) NULL; 
+
+UPDATE netflix_clean
+SET director = NULL
+WHERE director LIKE '%not given%';
+
+-- Vemos que algunas películas aparecen como signos de interrogación: los reemplazamos por nulos
+-- Incluyendo los títulos que tienen caracteres extraños entre los signos de interrogación
+
+SELECT title FROM netflix_clean
+WHERE title LIKE '%?%';
+
+ALTER TABLE netflix_clean
+ALTER COLUMN title VARCHAR(max) NULL;
+
+UPDATE netflix_clean
+SET title = NULL
+WHERE REPLACE(REPLACE(title, ' ', ''), ':', '') NOT LIKE '%[^?]%';
+
+-- Corregimos las que tienen signos de interrogación al inicio y en el medio
+
+SELECT title FROM netflix_clean
+WHERE title LIKE '?%';
+
+UPDATE netflix_clean
+SET title = REPLACE(title, '?', '')
+WHERE title LIKE '?%';
+
+-- Vemos que no haya espacios en blanco en los campos tipo string
+
+SELECT title FROM netflix_clean
+WHERE title != TRIM(title);
+
+SELECT type FROM netflix_clean
+WHERE type != TRIM(type);
+
+SELECT director FROM netflix_clean
+WHERE director != TRIM(director);
+
+SELECT cast FROM netflix_clean
+WHERE cast != TRIM(cast);
+
+SELECT country FROM netflix_clean
+WHERE country != TRIM(country);
+
+SELECT duration FROM netflix_clean
+WHERE duration != TRIM(country);
+
+-- Vemos que hay tres películas que tienen duración NULL pero en su rating aparece un string que indica claramente la duración en minutos
+-- Sustituimos los valores de duración por los de rating
+
+UPDATE netflix_clean
+SET duration = rating
+WHERE duration IS NULL;
+
+UPDATE netflix_clean
+SET rating = NULL
+WHERE rating LIKE '%min';
+
+-- Vemos que la duración está establecida en número de temporadas para las series y en minutos para las películas
+-- Creamos dos columnas diferentes para cada tipo para que concuerden entre ellas
+
+ALTER TABLE netflix_clean
+ADD duration_min INT;
+
+UPDATE netflix_clean
+SET duration_min = CAST(REPLACE(duration, 'min', '') AS INT)
+WHERE type='Movie';
+
+ALTER TABLE netflix_clean
+ADD duration_seasons INT;
+
+UPDATE netflix_clean
+SET duration_seasons = CAST(REPLACE(REPLACE(duration, 'Seasons', ''), 'Season', '') AS INT)
+WHERE type='TV Show';
+
+-- Comprobamos que la fecha de adición a Netflix sea previa a la de estreno para evitar datos erróneos
+
+SELECT * FROM netflix_clean
+WHERE YEAR(date_added)<release_year;
+
+-- Hay 14 registros en los que no se cumple esa condición
+-- Se toma la decisión de pasar la fecha de estreno al año en el que se añadió al catálogo de Netflix
+
+UPDATE netflix_clean
+SET release_year=YEAR(date_added)
+WHERE YEAR(date_added)<release_year;
+
+-- Para las columnas que contienen varios datos separados por comas, creamos tablas con esos valores por separado
+
+-- Creamos una tabla en la que se separan todos los directores que hay en cada show
+
+CREATE TABLE #director_table
+(
+    show_id INT,
+    director NVARCHAR(100)
+);
+
+INSERT INTO #director_table
+SELECT
+    n.show_id,
+    TRIM(value) AS director
+FROM netflix_clean n
+CROSS APPLY STRING_SPLIT(n.director, ',');
+
+-- Repetimos proceso para el caso de los actores
+
+CREATE TABLE #cast_table
+(
+    show_id INT,
+    actor NVARCHAR(100)
+);
+
+INSERT INTO #cast_table
+SELECT
+    n.show_id,
+	  TRIM(value) AS actor
+FROM netflix_clean n
+CROSS APPLY STRING_SPLIT(n.cast, ',');
+
+-- Vemos que algunos actores aparecen con signos de interrogación. Decidimos eliminar ese carácter.
+
+SELECT * FROM #cast_table
+WHERE actor LIKE '%?%';
+
+UPDATE #cast_table
+SET actor = REPLACE(actor, '?', '');
+
+-- Repetimos proceso para el caso de los países
+
+CREATE TABLE #country_table
+(
+    show_id INT,
+    country NVARCHAR(100)
+);
+
+INSERT INTO #country_table
+SELECT
+    n.show_id,
+	  TRIM(value) AS country
+FROM netflix_clean n
+CROSS APPLY STRING_SPLIT(n.country, ',');
+
+-- Vemos que algunos países aparecen con nulos porque en el campo original comenzaban con una coma. Decidimos eliminar esos registros
+
+SELECT * FROM #country_table
+WHERE country LIKE '';
+
+DELETE FROM #country_table
+WHERE country LIKE '';
+
+-- Vemos que distingue zonas de Alemania como distintos países. Decidimos agruparlas en un único valor
+-- Hay un show distingue East Germany y West Germany como distintos países por lo que nos preocupamos en que no se duplique el registro
+
+SELECT DISTINCT(country) FROM #country_table
+WHERE country LIKE '%Germany%';
+
+SELECT * FROM #country_table
+WHERE country IN ('East Germany','West Germany');
+
+DELETE FROM #country_table
+WHERE country LIKE 'East Germany';
+
+UPDATE #country_table
+SET country='Germany'
+WHERE country = 'West Germany';
+
+-- Repetimos proceso para el caso de las categorías (géneros de los shows)
+
+CREATE TABLE #category_table
+(
+    show_id INT,
+    category NVARCHAR(100)
+);
+
+INSERT INTO #category_table
+SELECT
+    n.show_id,
+	  TRIM(value) AS category
+FROM netflix_clean n
+CROSS APPLY STRING_SPLIT(n.listed_in, ',');
+
+-- Tras realizar la limpieza de datos y organizarlos, analizamos los datos
+
+SELECT 
+    type, 
+    COUNT(*) total,
+    CAST(ROUND(100.0*COUNT(*)/(SELECT COUNT(*) FROM netflix_clean),2) AS DECIMAL(10,2)) percentage
+FROM netflix_clean
+GROUP BY type;
+
+SELECT 
+    director, 
+    COUNT(*) total
+FROM #director_table
+GROUP BY director
+ORDER BY total DESC;
+
+SELECT 
+    actor, 
+    COUNT(*) total
+FROM #cast_table
+GROUP BY actor
+ORDER BY total DESC;
+
+SELECT
+    country,
+    COUNT(*) total
+FROM #country_table
+GROUP BY country
+ORDER BY total DESC;
+
+SELECT 
+    category,
+    COUNT(*) total
+FROM #category_table
+GROUP BY category
+ORDER BY total DESC;
+
+SELECT 
+    YEAR(date_added), 
+    COUNT(*) total 
+FROM netflix_clean
+WHERE YEAR(date_added) IS NOT NULL
+GROUP BY YEAR(date_added)
+ORDER BY total DESC;
+
+SELECT 
+    release_year,
+    COUNT(*) total 
+FROM netflix_clean
+WHERE release_year IS NOT NULL
+GROUP BY release_year
+ORDER BY total DESC;
+
+SELECT CAST(AVG(duration_min*1.0) AS DECIMAL(10,2)) avg_duration FROM netflix_clean;
+
+SELECT CAST(AVG(duration_seasons*1.0) AS DECIMAL(10,2)) avg_seasons FROM netflix_clean;
+
+SELECT 
+    rating, 
+    COUNT(*) total 
+FROM netflix_clean
+WHERE rating IS NOT NULL
+GROUP BY rating
+ORDER BY total DESC;
+
+-- Crecimiento anual del catálogo
+
+SELECT 
+    year,
+    CAST(running_total AS INT) AS total_catalogue, 
+    CAST((running_total - LAG(running_total) OVER (ORDER BY year)) / LAG(running_total) OVER (ORDER BY year) * 100.0 AS DECIMAL(10,2)) AS yoy_growth
+FROM (
+    SELECT 
+        year,
+        (SUM(year_additions) OVER (ORDER BY year))*1.0 AS running_total
+    FROM (
+        SELECT 
+            YEAR(date_added) AS year,
+            COUNT(show_id) AS year_additions
+        FROM netflix_clean
+        WHERE date_added IS NOT NULL
+        GROUP BY YEAR(date_added)
+    ) AS t1
+) AS t2
+ORDER BY year DESC;
+
+-- Tiempo medio entre el estreno y la incorporación al catálogo
+
+SELECT 
+    AVG(YEAR(date_added)-release_year) avg_addition 
+FROM netflix_clean
+WHERE release_year IS NOT NULL AND YEAR(date_added) IS NOT NULL;
+
+-- Países con más variedad de categorías
+
+SELECT 
+    co.country, 
+    COUNT(DISTINCT(ca.category)) variety
+FROM #country_table co
+JOIN #category_table ca ON co.show_id=ca.show_id
+GROUP BY co.country
+ORDER BY variety DESC;
