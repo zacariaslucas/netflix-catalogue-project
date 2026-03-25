@@ -25,14 +25,18 @@ El dataset proviene de Kaggle y contiene 8.807 registros con la siguiente inform
 3.	Se utiliza Tableau para construir un dashboard interactivo que permite visualizar los patrones detectados y analizar los factores asociados a los retrasos.
 
 ### DASHBOARD
-[<img width="1619" height="1079" alt="Dashboard 1" src="https://github.com/user-attachments/assets/6ed0601b-57c7-4497-adf8-51dd12093103" />
-](https://public.tableau.com/views/Netflix_17743679369640/Dashboard1?:language=es-ES&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)
+[<img width="1619" height="1079" alt="Dashboard 1 (1)" src="https://github.com/user-attachments/assets/cc1c02d7-9c77-4182-abc9-4d5c892c13cf" />](https://public.tableau.com/views/Netflix_17744493509460/Dashboard1?:language=es-ES&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)
 
 ### CONCLUSIONES
 Tras el análisis de los datos de origen y la comprensión de los resultados obtenidos, se obtienen las siguientes conclusiones:
 -	Las películas tienen mucho más protagonismo que las series, representando un 70% del contenido.
 -	El tiempo medio que transcurre entre el estreno del contenido y su incorporación al catálogo de Netflix es de 4,7 años.
--	El año que mayor crecimiento tuvo el catálogo con respecto al año anterior fue 2016, mientras que el año que más incorporaciones hubo fue en 2019.
--	Los géneros que más abundan son las películas internacionales, los dramas y las comedias.
+-	El año que mayor crecimiento tuvo el catálogo con respecto al año anterior fue 2016, mientras que el año con mayor número de incorporaciones fue 2019.
 -	El país que más contenido genera es, con diferencia, Estados Unidos.
+-	Los géneros que más abundan son las películas internacionales, los dramas y las comedias.
 -	Las categorías dominantes son TV-MA, TV-14 y TV-PG, indicando un enfoque a una audiencia madura.
+
+### HALLAZGOS CLAVE Y PROPUESTAS
+-	**Alto dominio de Estados Unidos**: Convendría expandir la distribución del contenido para evitar una alta dependencia.
+-	**Crecimiento acelerado en 2016**: Se propone analizar en detalle otras métricas sobre el rendimiento de contenido durante los años de mayor crecimiento para replicar estrategias exitosas.
+-	**Contenido no necesariamente reciente**: Con un promedio de 4,7 años en incorporarse a Netflix, reducir este tiempo podría aumentar la competitividad frente a otras plataformas con estrenos más inmediatos.
