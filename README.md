@@ -1,7 +1,7 @@
 # PROYECTO DE ANÁLISIS DE DATOS SOBRE EL CONTENIDO DEL CATÁLOGO DE NETFLIX
 
 ### OBJETIVO
-La empresa Netflix necesita un análisis histórico de su contenido que permita detectar oportunidades de mejora de la plataforma y tomar decisiones estratégicas para futuras incorporaciones al catálogo.
+La empresa Netflix requiere un análisis histórico de su contenido para identificar oportunidades de mejora de la plataforma y apoyar la toma de decisiones estratégicas sobre futuras incorporaciones. Como objetivo inicial está el de completar un proceso de limpieza y transformación del dataset original, corrigiendo problemas de calidad en los datos para garantizar la fiabilidad del análisis.
 
 ### BASE DE DATOS UTILIZADA
 El dataset proviene de Kaggle y contiene 8.807 registros con la siguiente información acerca del contenido de Netflix:
